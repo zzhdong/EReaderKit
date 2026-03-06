@@ -270,7 +270,8 @@ open class EPUBNavigatorViewController: InputObservableViewController,
     private let loadPositionsByReadingOrder: () async -> ReadResult<[[Locator]]>
     private var positionsByReadingOrder: [[Locator]] = []
 
-    private let viewModel: EPUBNavigatorViewModel
+    // ZZD-UPDAET: let 改为 public var
+    public var viewModel: EPUBNavigatorViewModel
     public var publication: Publication {
         viewModel.publication
     }

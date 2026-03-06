@@ -20,7 +20,8 @@ enum EPUBScriptScope {
     case resource(href: AnyURL)
 }
 
-@MainActor final class EPUBNavigatorViewModel: Loggable {
+// ZZD-UPDAET: 增加public
+@MainActor public final class EPUBNavigatorViewModel: Loggable {
     let publication: Publication
     // ZZD-UPDAET: let 改为 public var
     public var config: EPUBNavigatorViewController.Configuration
