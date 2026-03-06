@@ -22,7 +22,8 @@ enum EPUBScriptScope {
 
 @MainActor final class EPUBNavigatorViewModel: Loggable {
     let publication: Publication
-    let config: EPUBNavigatorViewController.Configuration
+    // ZZD-UPDAET: let 改为 public var
+    public var config: EPUBNavigatorViewController.Configuration
     let editingActions: EditingActionsController
 
     /// The base URL for the publication resources.
@@ -303,8 +304,8 @@ enum EPUBScriptScope {
     }
 
     // MARK: - Readium CSS
-
-    private var css: ReadiumCSS
+    // ZZD-UPDAET: private 改为 public
+    public var css: ReadiumCSS
     private var servedFonts: [FileURL: AbsoluteURL] = [:]
 
     func injectReadiumCSS<HREF: URLConvertible>(in resource: Resource, at href: HREF) -> Resource {
@@ -363,10 +364,9 @@ enum EPUBScriptScope {
             }
         }
         let userProperties = new.userProperties.cssProperties()
-        if previous.userProperties.cssProperties() != userProperties {
-            for (k, v) in userProperties {
-                properties[k] = v
-            }
+        // ZZD-UPDAET: 允许刷新，不用判断是否有更改，因为有自定义属性
+        for (k, v) in userProperties {
+            properties[k] = v
         }
         if !properties.isEmpty {
             guard

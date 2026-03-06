@@ -9,10 +9,12 @@ import ReadiumInternal
 import ReadiumShared
 import SwiftSoup
 
-struct ReadiumCSS {
+// ZZD-UPDAET: 增加public
+public struct ReadiumCSS {
     var layout: CSSLayout = .init()
     var rsProperties: CSSRSProperties = .init()
-    var userProperties: CSSUserProperties = .init()
+    // ZZD-UPDAET: 增加public
+    public var userProperties: CSSUserProperties = .init()
 
     /// Base URL of the Readium CSS assets.
     var baseURL: any AbsoluteURL
@@ -23,6 +25,11 @@ struct ReadiumCSS {
 extension ReadiumCSS {
     mutating func update(with settings: EPUBSettings) {
         layout = settings.cssLayout
+        // ZZD-UPDAET: 保留原来的自定义 overrides
+        var currentOverrides = userProperties.overrides
+        currentOverrides["font-weight"] = settings.fontWeight
+            .map { String(format: "%.0f", (Double(CSSStandardFontWeight.normal.rawValue) * $0).clamped(to: 1 ... 1000)) }
+            ?? ""
         userProperties = CSSUserProperties(
             view: settings.scroll ? .scroll : .paged,
             colCount: {
@@ -66,11 +73,8 @@ extension ReadiumCSS {
             bodyHyphens: settings.hyphens.map { $0 ? .auto : .none },
             ligatures: settings.ligatures.map { $0 ? .common : .none },
             a11yNormalize: settings.textNormalization,
-            overrides: [
-                "font-weight": settings.fontWeight
-                    .map { String(format: "%.0f", (Double(CSSStandardFontWeight.normal.rawValue) * $0).clamped(to: 1 ... 1000)) }
-                    ?? "",
-            ]
+            // ZZD-UPDAET: 保留原来的自定义 overrides
+            overrides: currentOverrides
         )
     }
 
@@ -137,10 +141,15 @@ extension ReadiumCSS: HTMLInjectable {
     /// Returns whether the given `html` has any CSS styles.
     ///
     /// https://github.com/readium/readium-css/blob/develop/docs/CSS06-stylesheets_order.md#append-if-there-is-no-authors-styles
+    /// ZZD-UPDATE： 新增判断自定义txt
     private func hasStyles(_ html: String) -> Bool {
-        html.localizedCaseInsensitiveContains("<link ")
-            || html.localizedCaseInsensitiveContains(" style=")
-            || html.localizedCaseInsensitiveContains("</style>")
+        if html.localizedCaseInsensitiveContains("content=\"EReaderApp\"") {
+            return false
+        } else {
+            return html.localizedCaseInsensitiveContains("<link ")
+                    || html.localizedCaseInsensitiveContains(" style=")
+                    || html.localizedCaseInsensitiveContains("</style>")
+        }
     }
 
     /// Injects the current Readium CSS properties inline in `html`.

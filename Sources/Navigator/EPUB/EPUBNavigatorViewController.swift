@@ -696,6 +696,8 @@ open class EPUBNavigatorViewController: InputObservableViewController,
         }
 
         let visibleReadingOrder: [(index: Int, href: AnyURL)] = spreadView.spread.readingOrderIndices
+            // ZZD-UPDAET: 过滤非法索引
+            .filter { $0 >= 0 && $0 < readingOrder.count }
             .map { ($0, readingOrder[$0].url()) }
 
         var viewport = Viewport(
@@ -715,6 +717,10 @@ open class EPUBNavigatorViewController: InputObservableViewController,
         let firstProgressionInFirstResource = min(max(progressionOfFirstResource.lowerBound, 0.0), 1.0)
         let lastProgressionInLastResource = min(max(progressionOfLastResource.upperBound, 0.0), 1.0)
 
+        // ZZD-UPDAET: 过滤非法索引
+        if firstIndex >= readingOrder.count {
+            return (nil, nil)
+        }
         let link = readingOrder[firstIndex]
         let location: Locator?
 
@@ -1078,8 +1084,11 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
 
         case .reflowable:
             let configInset = config.contentInset(for: view.traitCollection.verticalSizeClass)
-            insets.top = max(insets.top, configInset.top)
-            insets.bottom = max(insets.bottom, configInset.bottom)
+            // ZZD-UPDAET：自定义
+            // insets.top = max(insets.top, configInset.top)
+            // insets.bottom = max(insets.bottom, configInset.bottom)
+            insets.top = insets.top + configInset.top
+            insets.bottom = configInset.bottom
         }
 
         return insets
@@ -1276,6 +1285,162 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
 
     func spreadViewDidTerminate() {
         reloadSpreads()
+    }
+
+    // ZZD-UPDAET：显示正在加载界面
+    @MainActor
+    public func showLoading(color: UIColor) {
+        assert(Thread.isMainThread)
+        // 1) 如果 overlay 已存在就返回
+        if view.viewWithTag(0xF00D_BABE) != nil { return }
+        // 2) 创建并展示 overlay（风格接近系统）
+        let overlay = UIView(frame: view.bounds)
+        overlay.frame = view.bounds
+        overlay.backgroundColor = color
+        overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        overlay.tag = 0xF00D_BABE
+        overlay.isUserInteractionEnabled = true // 阻断底下交互（与 state 一致）
+        let indicator = UIActivityIndicatorView(style: .medium)
+        indicator.translatesAutoresizingMaskIntoConstraints = false
+        switch viewModel.theme {
+        case .dark:
+            indicator.color = .white
+        default:
+            indicator.color = .systemGray
+        }
+        overlay.addSubview(indicator)
+        indicator.centerXAnchor.constraint(equalTo: overlay.centerXAnchor).isActive = true
+        indicator.centerYAnchor.constraint(equalTo: overlay.centerYAnchor).isActive = true
+        indicator.startAnimating()
+        overlay.alpha = 0.5
+        view.addSubview(overlay)
+        UIView.animate(withDuration: 0.3) {
+            overlay.alpha = 1.0
+        }
+        paginationView?.isUserInteractionEnabled = false
+    }
+
+    // ZZD-UPDAET：显示加载结束界面
+    @MainActor
+    public func hideLoading() {
+        assert(Thread.isMainThread)
+        guard let overlay = view.viewWithTag(0xF00D_BABE) else { return }
+        UIView.animate(withDuration: 0.3, animations: {
+            overlay.alpha = 0.0
+        }, completion: { _ in
+            overlay.removeFromSuperview()
+        })
+        paginationView?.isUserInteractionEnabled = true
+    }
+
+    // ZZD-UPDAET：当前章节总页数
+    @MainActor
+    public func getTotalPage() -> Int {
+        if let spreadView = paginationView?.currentView as? EPUBSpreadView, spreadView.scrollView.frame.size.width > 0 {
+            return Int(spreadView.scrollView.contentSize.width / spreadView.scrollView.frame.size.width)
+        }
+        return 1
+    }
+
+    // ZZD-UPDAET：当前章节总页数
+    @MainActor
+    public func getCurrentPage() -> Int {
+        guard let progression = currentLocation?.locations.progression else {
+            return 1
+        }
+        return Int(round(Double(getTotalPage()) * progression)) + 1
+    }
+
+    // ZZD-UPDAET：当前章节进度
+    @MainActor
+    public func getCurrentProgress() -> Double {
+        guard let progression = currentLocation?.locations.progression else {
+            return 0
+        }
+        return progression
+    }
+
+    // ZZD-UPDAET：当前章节内容
+    public func getCurrentPageContent() async -> String {
+        let js = #"""
+            (function() {
+                // 可见区域边界（viewport）
+                var vw = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+                function rectIntersectsViewport(r) {
+                    return !(r.right <= vw.left || r.left >= vw.right || r.bottom <= vw.top || r.top >= vw.bottom);
+                }
+                function rectsIntersectAny(rectList) {
+                    for (var i = 0; i < rectList.length; i++) {
+                        var r = rectList[i];
+                        if (rectIntersectsViewport(r)) return true;
+                    }
+                    return false;
+                }
+                var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                var node;
+                var parts = [];
+                var maxNodes = 5000; // safety limit to avoid pathological cost; adjust if needed
+                var nodeCount = 0;
+                while ((node = walker.nextNode()) && nodeCount++ < maxNodes) {
+                    var txt = node.nodeValue;
+                    if (!txt) continue;
+                    // 过滤空白
+                    if (!/[^\s]/.test(txt)) continue;
+                    var parentEl = node.parentElement;
+                    if (!parentEl) continue;
+                    // 快速判定：父元素 bounding rect 与 viewport 是否相交
+                    var parentRect = parentEl.getBoundingClientRect();
+                    if (!rectIntersectsViewport(parentRect)) continue;
+                    // 全节范围 rects
+                    var rng = document.createRange();
+                    rng.selectNodeContents(node);
+                    var rects = rng.getClientRects();
+                    if (!rects.length) continue;
+                    if (!rectsIntersectAny(rects)) continue;
+                    // binary search 找到首个可见字符索引
+                    var len = node.length;
+                    var lo = 0, hi = len - 1, first = len;
+                    while (lo <= hi) {
+                        var mid = Math.floor((lo + hi) / 2);
+                        rng.setStart(node, mid);
+                        rng.setEnd(node, mid + 1);
+                        var r = rng.getClientRects();
+                        if (r.length && rectsIntersectAny(r)) {
+                            first = mid;
+                            hi = mid - 1;
+                        } else {
+                            lo = mid + 1;
+                        }
+                    }
+                    if (first === len) continue; // 没找到可见字符（保险）
+                    // binary search 找到最后一个可见字符索引
+                    lo = first; hi = len - 1;
+                    var last = first;
+                    while (lo <= hi) {
+                        var mid = Math.floor((lo + hi) / 2);
+                        rng.setStart(node, mid);
+                        rng.setEnd(node, mid + 1);
+                        var r2 = rng.getClientRects();
+                        if (r2.length && rectsIntersectAny(r2)) {
+                            last = mid;
+                            lo = mid + 1;
+                        } else {
+                            hi = mid - 1;
+                        }
+                    }
+                    // 严格只取可见字符，不做扩展
+                    var visible = node.nodeValue.substring(first, last + 1).trim();
+                    if (visible) parts.push(visible);
+                }
+                return parts.join("\n");
+            })();
+            """#
+        if let spreadView = paginationView?.currentView as? EPUBSpreadView {
+            if let result = try? await spreadView.webView.evaluateJavaScript(js), let content = result as? String {
+                return content
+            }
+        }
+        return ""
     }
 }
 
