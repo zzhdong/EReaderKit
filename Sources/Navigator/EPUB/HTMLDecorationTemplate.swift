@@ -5,11 +5,12 @@
 //
 
 import Foundation
+import ReadiumShared
 import SwiftSoup
 import UIKit
 
 /// An `HTMLDecorationTemplate` renders a `Decoration` into a set of HTML elements and associated stylesheet.
-public struct HTMLDecorationTemplate {
+public struct HTMLDecorationTemplate: JSONObjectEncodable {
     /// Determines the number of created HTML elements and their position relative to the matching DOM range.
     public enum Layout: String {
         /// A single HTML element covering the smallest region containing all CSS border boxes.
@@ -46,12 +47,12 @@ public struct HTMLDecorationTemplate {
         self.init(layout: layout, width: width, element: { _ in element }, stylesheet: stylesheet)
     }
 
-    public var json: [String: Any] {
-        [
+    public var jsonObject: [String: JSONValue] {
+        .init([
             "layout": layout.rawValue,
             "width": width.rawValue,
-            "stylesheet": stylesheet as Any,
-        ]
+            "stylesheet": stylesheet,
+        ])
     }
 
     /// Creates the default list of decoration styles with associated HTML templates.

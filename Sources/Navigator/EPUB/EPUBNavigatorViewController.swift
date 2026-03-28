@@ -684,86 +684,31 @@ open class EPUBNavigatorViewController: InputObservableViewController,
     }
 
     private func computeCurrentLocationAndViewport() async -> (Locator?, Viewport?) {
-        if case .initializing = state {
-            assertionFailure("Cannot update current location when initializing the navigator")
-            return (nil, nil)
-        }
-
-        // Returns any pending locator to prevent returning invalid locations
-        // while loading it.
-        if let pendingLocator = state.pendingLocator {
-            return (pendingLocator, nil)
-        }
-
-        guard let spreadView = paginationView?.currentView as? EPUBSpreadView else {
-            return (nil, nil)
-        }
-
-        let visibleReadingOrder: [(index: Int, href: AnyURL)] = spreadView.spread.readingOrderIndices
-            // ZZD-UPDAET: 过滤非法索引
-            .filter { $0 >= 0 && $0 < readingOrder.count }
-            .map { ($0, readingOrder[$0].url()) }
-
-        var viewport = Viewport(
-            readingOrder: visibleReadingOrder.map(\.href),
-            progressions: visibleReadingOrder.reduce([:]) { progressions, i in
-                var progressions = progressions
-                progressions[i.href] = spreadView.progression(in: i.index)
-                return progressions
-            },
-            positions: nil
-        )
-
-        let firstIndex = spreadView.spread.readingOrderIndices.lowerBound
-        let lastIndex = spreadView.spread.readingOrderIndices.upperBound
-        let progressionOfFirstResource = spreadView.progression(in: firstIndex)
-        let progressionOfLastResource = spreadView.progression(in: lastIndex)
-        let firstProgressionInFirstResource = min(max(progressionOfFirstResource.lowerBound, 0.0), 1.0)
-        let lastProgressionInLastResource = min(max(progressionOfLastResource.upperBound, 0.0), 1.0)
-
-        // ZZD-UPDAET: 过滤非法索引
-        if firstIndex >= readingOrder.count {
-            return (nil, nil)
-        }
-        let link = readingOrder[firstIndex]
-        let location: Locator?
-
-        if
-            // The positions are not always available, for example a Readium
-            // WebPub doesn't have any unless a Publication Positions Web
-            // Service is provided
-            let positionsOfFirstResource = positionsByReadingOrder.getOrNil(firstIndex),
-            let positionsOfLastResource = positionsByReadingOrder.getOrNil(lastIndex),
-            !positionsOfFirstResource.isEmpty,
-            !positionsOfLastResource.isEmpty
-        {
-            // Gets the current locator from the positions, and fill its missing
-            // data.
-            let firstPositionIndex = Int(ceil(firstProgressionInFirstResource * Double(positionsOfFirstResource.count - 1)))
-            let lastPositionIndex = (lastProgressionInLastResource == 1.0)
-                ? positionsOfLastResource.count - 1
-                : max(firstPositionIndex, Int(ceil(lastProgressionInLastResource * Double(positionsOfLastResource.count - 1))) - 1)
-
-            location = await positionsOfFirstResource[firstPositionIndex].copy(
-                title: tableOfContentsTitleByHref[link.url()],
-                locations: { $0.progression = firstProgressionInFirstResource }
-            )
-
-            if
-                let firstPosition = location?.locations.position,
-                let lastPosition = positionsOfLastResource[lastPositionIndex].locations.position
-            {
-                viewport.positions = firstPosition ... lastPosition
+            if case .initializing = state {
+                assertionFailure("Cannot update current location when initializing the navigator")
+                return (nil, nil)
             }
 
-        } else {
-            location = await publication.locate(link)?.copy(
-                locations: { $0.progression = firstProgressionInFirstResource }
-            )
-        }
+            // Returns any pending locator to prevent returning invalid locations
+            // while loading it.
+            if let pendingLocator = state.pendingLocator {
+                return (pendingLocator, nil)
+            }
 
-        return (location, viewport)
-    }
+            guard let spreadView = paginationView?.currentView as? EPUBSpreadView else {
+                return (nil, nil)
+            }
+
+            let (locator, viewport) = await EPUBViewportAndLocationCalculator.compute(
+                readingOrderIndices: spreadView.spread.readingOrderIndices,
+                progression: { spreadView.progression(in: $0) },
+                readingOrder: readingOrder,
+                positionsByReadingOrder: positionsByReadingOrder,
+                tableOfContentsTitleByHref: tableOfContentsTitleByHref,
+                fallbackLocator: { [publication] in await publication.locate($0) }
+            )
+            return (locator, viewport)
+        }
 
     public func firstVisibleElementLocator() async -> Locator? {
         guard let spreadView = paginationView?.currentView as? EPUBSpreadView else {
@@ -1100,11 +1045,11 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
         await MainActor.run {
             hideLoading()
         }
-        let templates = config.decorationTemplates.reduce(into: [:]) { styles, item in
-            styles[item.key.rawValue] = item.value.json
+        let templates = config.decorationTemplates.reduce(into: [String: JSONValue]()) { styles, item in
+            styles[item.key.rawValue] = .object(item.value.jsonObject)
         }
 
-        guard let stylesJSON = serializeJSONString(templates) else {
+        guard let stylesJSON = try? templates.jsonString() else {
             log(.error, "Can't serialize decoration styles to JSON")
             return
         }

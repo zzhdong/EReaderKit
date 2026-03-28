@@ -12,6 +12,16 @@ All notable changes to this project will be documented in this file. Take a look
     * `Recipes/` contains self-contained and explained code you can reuse in your own application.
     * `App/` folder contains the scaffolding (file management, navigation, error handling) needed to run the Playground.
 
+### Changed
+
+#### Shared
+
+* All public types that parsed or serialized JSON now use the new type-safe `JSONValue` enum instead of `Any` / `[String: Any]`. See [the migration guide](docs/Migration%20Guide.md) for upgrade instructions.
+
+#### Navigator
+
+* The `DirectionalNavigationAdapter`'s policies and animated transitions are now mutable, allowing you to update the adapter's behavior after creation.
+
 ### Fixed
 
 #### Shared
@@ -23,6 +33,7 @@ All notable changes to this project will be documented in this file. Take a look
 #### Navigator
 
 * [#737](https://github.com/readium/swift-toolkit/issues/737) Fixed screen flashes when turning pages without animation in the EPUB navigator.
+* The EPUB navigator now reports a continuous `locator.locations.totalProgression` value, interpolated from the actual scroll position within the resource's global progression range. Previously, the value was quantized to the nearest position in the position list.
 
 #### Streamer
 

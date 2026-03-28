@@ -17,7 +17,7 @@ import ReadiumInternal
 /// given `Publication`. If a navigator needs a default value when not specified,
 /// `Presentation.defaultX` and `Presentation.X.default` can be used.
 @available(*, unavailable, message: "This was removed from RWPM. You can still use the EPUB extensibility to access the original values.")
-public struct Presentation: Equatable {
+public struct Presentation: Equatable, JSONValueDecodable, JSONObjectEncodable {
     /// Specifies whether or not the parts of a linked resource that flow out of the viewport are
     /// clipped.
     public let clipped: Bool?
@@ -53,36 +53,36 @@ public struct Presentation: Equatable {
         self.layout = layout
     }
 
-    public init(json: Any?, warnings: WarningLogger? = nil) throws {
-        guard json != nil else {
+    public init?<T: JSONValueEncodable>(json: T?, warnings: WarningLogger?) throws {
+        guard let json = json?.jsonValue else {
             self.init()
             return
         }
-        guard let jsonObject = json as? [String: Any] else {
+        guard let jsonObject = json.object else {
             warnings?.log("Invalid JSON object", model: Self.self, source: json)
             throw JSONError.parsing(Self.self)
         }
 
         self.init(
-            clipped: jsonObject["clipped"] as? Bool,
-            continuous: jsonObject["continuous"] as? Bool,
-            fit: parseRaw(jsonObject["fit"]),
-            orientation: parseRaw(jsonObject["orientation"]),
-            overflow: parseRaw(jsonObject["overflow"]),
-            spread: parseRaw(jsonObject["spread"]),
-            layout: parseRaw(jsonObject["layout"])
+            clipped: jsonObject["clipped"]?.bool,
+            continuous: jsonObject["continuous"]?.bool,
+            fit: jsonObject["fit"]?.decode(),
+            orientation: jsonObject["orientation"]?.decode(),
+            overflow: jsonObject["overflow"]?.decode(),
+            spread: jsonObject["spread"]?.decode(),
+            layout: jsonObject["layout"]?.decode()
         )
     }
 
-    public var json: [String: Any] {
-        makeJSON([
-            "clipped": encodeIfNotNil(clipped),
-            "continuous": encodeIfNotNil(continuous),
-            "fit": encodeRawIfNotNil(fit),
-            "orientation": encodeRawIfNotNil(orientation),
-            "overflow": encodeRawIfNotNil(overflow),
-            "spread": encodeRawIfNotNil(spread),
-            "layout": encodeRawIfNotNil(layout),
+    public var jsonObject: [String: JSONValue] {
+        .init([
+            "clipped": clipped,
+            "continuous": continuous,
+            "fit": fit?.rawValue,
+            "orientation": orientation?.rawValue,
+            "overflow": overflow?.rawValue,
+            "spread": spread?.rawValue,
+            "layout": layout?.rawValue,
         ])
     }
 

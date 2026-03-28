@@ -351,7 +351,7 @@ class EPUBSpreadView: UIView, Loggable, PageView {
             let selection = body as? [String: Any],
             let hrefString = selection["href"] as? String,
             let href = AnyURL(string: hrefString),
-            let text = try? Locator.Text(json: selection["text"]),
+            let text = try? Locator.Text(json: JSONValue(selection["text"])),
             var frame = CGRect(json: selection["rect"])
         else {
             focusedResource = nil
@@ -404,8 +404,15 @@ class EPUBSpreadView: UIView, Loggable, PageView {
         let result = await evaluateScript("readium.findFirstVisibleLocator()")
         do {
             let link = spread.first.link
-            return try Locator(json: result.get())?
-                .copy(href: link.url(), mediaType: link.mediaType ?? .xhtml)
+
+            guard
+                let json = try JSONValue(result.get()),
+                let locator = try Locator(json: json)
+            else {
+                return nil
+            }
+            return locator.copy(href: link.url(), mediaType: link.mediaType ?? .xhtml)
+
         } catch {
             log(.error, error)
             return nil

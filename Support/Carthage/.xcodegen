@@ -326,7 +326,6 @@
 ../../Sources/Internal/Extensions/Task.swift
 ../../Sources/Internal/Extensions/UInt64.swift
 ../../Sources/Internal/Extensions/URL.swift
-../../Sources/Internal/JSON.swift
 ../../Sources/Internal/Keychain.swift
 ../../Sources/Internal/Measure.swift
 ../../Sources/Internal/UTI.swift
@@ -469,6 +468,7 @@
 ../../Sources/Navigator/EPUB/EPUBReflowableSpreadView.swift
 ../../Sources/Navigator/EPUB/EPUBSpread.swift
 ../../Sources/Navigator/EPUB/EPUBSpreadView.swift
+../../Sources/Navigator/EPUB/EPUBViewportAndLocationCalculator.swift
 ../../Sources/Navigator/EPUB/HTMLDecorationTemplate.swift
 ../../Sources/Navigator/EPUB/Preferences
 ../../Sources/Navigator/EPUB/Preferences/EPUBPreferences.swift
@@ -783,7 +783,6 @@
 ../../Sources/Shared/Toolkit/HTTP/HTTPResource.swift
 ../../Sources/Shared/Toolkit/HTTP/HTTPResourceFactory.swift
 ../../Sources/Shared/Toolkit/HTTP/HTTPServer.swift
-../../Sources/Shared/Toolkit/JSON.swift
 ../../Sources/Shared/Toolkit/JSONValue.swift
 ../../Sources/Shared/Toolkit/Language.swift
 ../../Sources/Shared/Toolkit/Logging
