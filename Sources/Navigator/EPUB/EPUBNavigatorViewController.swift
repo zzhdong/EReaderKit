@@ -621,6 +621,9 @@ open class EPUBNavigatorViewController: InputObservableViewController,
             return
         }
 
+        // ZZD-UPDAET: 显示正在加载
+        showLoading(color: view.backgroundColor ?? .clear)
+
         spreads = EPUBSpread.makeSpreads(
             for: publication,
             readingOrder: readingOrder,
@@ -1085,17 +1088,18 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
 
         case .reflowable:
             let configInset = config.contentInset(for: view.traitCollection.verticalSizeClass)
-            // ZZD-UPDAET：自定义
-            // insets.top = max(insets.top, configInset.top)
-            // insets.bottom = max(insets.bottom, configInset.bottom)
-            insets.top = insets.top + configInset.top
-            insets.bottom = configInset.bottom
+            insets.top = max(insets.top, configInset.top)
+            insets.bottom = max(insets.bottom, configInset.bottom)
         }
 
         return insets
     }
 
+    // ZZD-UPDAET: 隐藏加载
     func spreadViewDidLoad(_ spreadView: EPUBSpreadView) async {
+        await MainActor.run {
+            hideLoading()
+        }
         let templates = config.decorationTemplates.reduce(into: [:]) { styles, item in
             styles[item.key.rawValue] = item.value.json
         }
@@ -1288,19 +1292,37 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
         reloadSpreads()
     }
 
+    // ZZD-UPDAET：优先把 loading 挂到最外层宿主 view，确保指示器位于全屏中心
+    @MainActor
+    private func loadingHostView() -> UIView? {
+        if let window = view.window {
+            return window
+        }
+
+        var topView = view
+        var parentViewController = parent
+        while let currentParent = parentViewController {
+            topView = currentParent.view
+            parentViewController = currentParent.parent
+        }
+        return topView
+    }
+
     // ZZD-UPDAET：显示正在加载界面
     @MainActor
     public func showLoading(color: UIColor) {
         assert(Thread.isMainThread)
-        // 1) 如果 overlay 已存在就返回
-        if view.viewWithTag(0xF00D_BABE) != nil { return }
-        // 2) 创建并展示 overlay（风格接近系统）
-        let overlay = UIView(frame: view.bounds)
-        overlay.frame = view.bounds
+        guard let hostView = loadingHostView() else {
+            return
+        }
+        if hostView.viewWithTag(0xF00D_BABE) != nil { return }
+
+        let overlay = UIView(frame: hostView.bounds)
+        overlay.frame = hostView.bounds
         overlay.backgroundColor = color
         overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         overlay.tag = 0xF00D_BABE
-        overlay.isUserInteractionEnabled = true // 阻断底下交互（与 state 一致）
+        overlay.isUserInteractionEnabled = true
         let indicator = UIActivityIndicatorView(style: .medium)
         indicator.translatesAutoresizingMaskIntoConstraints = false
         switch viewModel.theme {
@@ -1314,7 +1336,7 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
         indicator.centerYAnchor.constraint(equalTo: overlay.centerYAnchor).isActive = true
         indicator.startAnimating()
         overlay.alpha = 0.5
-        view.addSubview(overlay)
+        hostView.addSubview(overlay)
         UIView.animate(withDuration: 0.3) {
             overlay.alpha = 1.0
         }
@@ -1325,7 +1347,7 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
     @MainActor
     public func hideLoading() {
         assert(Thread.isMainThread)
-        guard let overlay = view.viewWithTag(0xF00D_BABE) else { return }
+        guard let hostView = loadingHostView(), let overlay = hostView.viewWithTag(0xF00D_BABE) else { return }
         UIView.animate(withDuration: 0.3, animations: {
             overlay.alpha = 0.0
         }, completion: { _ in

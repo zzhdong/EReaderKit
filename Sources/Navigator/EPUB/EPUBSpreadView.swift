@@ -597,20 +597,11 @@ private extension EPUBSpreadView {
         }
     }
 
+    // ZZD-UPDAET: 创建加载指示器
     func createActivityIndicator(color: UIColor) {
-        guard activityIndicatorView?.color != color else {
-            return
-        }
-
+        activityIndicatorView?.stopAnimating()
         activityIndicatorView?.removeFromSuperview()
-        let view = UIActivityIndicatorView(style: .medium)
-        view.color = color
-        view.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(view)
-        view.centerXAnchor.constraint(equalTo: centerXAnchor).isActive = true
-        view.centerYAnchor.constraint(equalTo: centerYAnchor).isActive = true
-        view.startAnimating()
-        activityIndicatorView = view
+        activityIndicatorView = nil
     }
 
     private func setNeedsStopActivityIndicator() {
