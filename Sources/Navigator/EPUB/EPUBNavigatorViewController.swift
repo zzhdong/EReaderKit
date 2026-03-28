@@ -280,6 +280,10 @@ open class EPUBNavigatorViewController: InputObservableViewController,
         viewModel.config
     }
 
+    // ZZD-UPDAET:
+    @MainActor
+    public weak var externalLoadingHostView: UIView?
+
     /// Creates a new instance of `EPUBNavigatorViewController`.
     ///
     /// - Parameters:
@@ -1240,17 +1244,20 @@ extension EPUBNavigatorViewController: EPUBSpreadViewDelegate {
     // ZZD-UPDAET：优先把 loading 挂到最外层宿主 view，确保指示器位于全屏中心
     @MainActor
     private func loadingHostView() -> UIView? {
+        if let externalLoadingHostView {
+            return externalLoadingHostView
+        }
         if let window = view.window {
             return window
         }
 
-        var topView = view
-        var parentViewController = parent
-        while let currentParent = parentViewController {
-            topView = currentParent.view
-            parentViewController = currentParent.parent
+        var current = view.superview
+        var topMost = view
+        while let superview = current {
+            topMost = superview
+            current = superview.superview
         }
-        return topView
+        return topMost
     }
 
     // ZZD-UPDAET：显示正在加载界面
