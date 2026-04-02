@@ -6,7 +6,6 @@
 
 import Foundation
 import ReadiumShared
-import SwiftSoup
 import UIKit
 
 /// An `HTMLDecorationTemplate` renders a `Decoration` into a set of HTML elements and associated stylesheet.
