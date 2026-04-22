@@ -11,26 +11,23 @@ import SwiftSoup
 import UIKit
 import WebKit
 
-@MainActor public protocol EPUBNavigatorDelegate: VisualNavigatorDelegate, SelectableNavigatorDelegate {
-    /// Called when the viewport is updated.
-    func navigator(_ navigator: EPUBNavigatorViewController, viewportDidChange viewport: EPUBNavigatorViewController.Viewport?)
-
+@MainActor public protocol EPUBNavigatorDelegate: VisualNavigatorDelegate, SelectableNavigatorDelegate,
+    ViewportObservingNavigatorDelegate
+{
     // MARK: - WebView Customization
 
     func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController)
 }
 
 public extension EPUBNavigatorDelegate {
-    func navigator(_ navigator: EPUBNavigatorViewController, viewportDidChange viewport: EPUBNavigatorViewController.Viewport?) {}
-
     func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {}
 }
 
 public typealias EPUBContentInsets = (top: CGFloat, bottom: CGFloat)
 
 open class EPUBNavigatorViewController: InputObservableViewController,
-    VisualNavigator, SelectableNavigator, DecorableNavigator,
-    Configurable, Loggable
+    VisualNavigator, ViewportObservingNavigator, SelectableNavigator,
+    DecorableNavigator, Configurable, Loggable
 {
     public enum EPUBError: Error {
         /// The provided publication is restricted. Check that any DRM was
@@ -139,7 +136,7 @@ open class EPUBNavigatorViewController: InputObservableViewController,
     public weak var delegate: EPUBNavigatorDelegate?
 
     /// Information about the visible portion of the publication, when rendered.
-    public private(set) var viewport: Viewport? {
+    public private(set) var viewport: NavigatorViewport? {
         didSet {
             if oldValue != viewport {
                 delegate?.navigator(self, viewportDidChange: viewport)
@@ -147,18 +144,8 @@ open class EPUBNavigatorViewController: InputObservableViewController,
         }
     }
 
-    /// Information about the visible portion of the publication.
-    public struct Viewport: Equatable {
-        /// Visible reading order resources.
-        public var readingOrder: [AnyURL]
-
-        /// Range of visible scroll progressions for each visible reading order
-        /// resource.
-        public var progressions: [AnyURL: ClosedRange<Double>]
-
-        /// Range of visible positions.
-        public var positions: ClosedRange<Int>?
-    }
+    @available(*, deprecated, renamed: "NavigatorViewport")
+    public typealias Viewport = NavigatorViewport
 
     /// Navigation state.
     private enum State: Equatable {
@@ -687,32 +674,32 @@ open class EPUBNavigatorViewController: InputObservableViewController,
         )
     }
 
-    private func computeCurrentLocationAndViewport() async -> (Locator?, Viewport?) {
-            if case .initializing = state {
-                assertionFailure("Cannot update current location when initializing the navigator")
-                return (nil, nil)
-            }
-
-            // Returns any pending locator to prevent returning invalid locations
-            // while loading it.
-            if let pendingLocator = state.pendingLocator {
-                return (pendingLocator, nil)
-            }
-
-            guard let spreadView = paginationView?.currentView as? EPUBSpreadView else {
-                return (nil, nil)
-            }
-
-            let (locator, viewport) = await EPUBViewportAndLocationCalculator.compute(
-                readingOrderIndices: spreadView.spread.readingOrderIndices,
-                progression: { spreadView.progression(in: $0) },
-                readingOrder: readingOrder,
-                positionsByReadingOrder: positionsByReadingOrder,
-                tableOfContentsTitleByHref: tableOfContentsTitleByHref,
-                fallbackLocator: { [publication] in await publication.locate($0) }
-            )
-            return (locator, viewport)
+    private func computeCurrentLocationAndViewport() async -> (Locator?, NavigatorViewport?) {
+        if case .initializing = state {
+            assertionFailure("Cannot update current location when initializing the navigator")
+            return (nil, nil)
         }
+
+        // Returns any pending locator to prevent returning invalid locations
+        // while loading it.
+        if let pendingLocator = state.pendingLocator {
+            return (pendingLocator, nil)
+        }
+
+        guard let spreadView = paginationView?.currentView as? EPUBSpreadView else {
+            return (nil, nil)
+        }
+
+        let (locator, viewport) = await EPUBViewportAndLocationCalculator.compute(
+            readingOrderIndices: spreadView.spread.readingOrderIndices,
+            progression: { spreadView.progression(in: $0) },
+            readingOrder: readingOrder,
+            positionsByReadingOrder: positionsByReadingOrder,
+            tableOfContentsTitleByHref: tableOfContentsTitleByHref,
+            fallbackLocator: { [publication] in await publication.locate($0) }
+        )
+        return (locator, viewport)
+    }
 
     public func firstVisibleElementLocator() async -> Locator? {
         guard let spreadView = paginationView?.currentView as? EPUBSpreadView else {
