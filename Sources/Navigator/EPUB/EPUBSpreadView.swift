@@ -710,7 +710,7 @@ private extension EPUBSpreadView {
     func createActivityIndicator(color: UIColor) {
         activityIndicatorView?.stopAnimating()
         activityIndicatorView?.removeFromSuperview()
-        activityIndicatorView = nil
+        activityIndicatorView = addCenteredActivityIndicator(color: color)
     }
 
     private func setNeedsStopActivityIndicator() {
